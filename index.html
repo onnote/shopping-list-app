@@ -142,9 +142,13 @@
     <div class="empty" id="empty">리스트가 비어 있습니다.</div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const STORAGE_KEY = 'shopping-list';
-    let items = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    const SUPABASE_URL = 'https://bdixmeuqztzvbxjcvowf.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJkaXhtZXVxenR6dmJ4amN2b3dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1MjUwMTAsImV4cCI6MjA4NzEwMTAxMH0.5C4PfA0WUJRmn3cKkTvVGr4gWc1XRc5gvy1Dl8aOa-U';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let items = [];
 
     const listEl = document.getElementById('list');
     const emptyEl = document.getElementById('empty');
@@ -155,10 +159,6 @@
       if (e.key === 'Enter') addItem();
     });
 
-    function save() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    }
-
     function render() {
       listEl.innerHTML = '';
       const checked = items.filter(i => i.checked).length;
@@ -167,52 +167,77 @@
         : '';
       emptyEl.style.display = items.length ? 'none' : 'block';
 
-      items.forEach((item, idx) => {
+      items.forEach((item) => {
         const li = document.createElement('li');
         if (item.checked) li.classList.add('checked');
 
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = item.checked;
-        cb.addEventListener('change', () => toggleItem(idx));
+        cb.addEventListener('change', () => toggleItem(item.id));
 
         const span = document.createElement('span');
         span.textContent = item.name;
-        span.addEventListener('click', () => toggleItem(idx));
+        span.addEventListener('click', () => toggleItem(item.id));
 
         const btn = document.createElement('button');
         btn.textContent = '\u00d7';
         btn.title = '삭제';
-        btn.addEventListener('click', () => deleteItem(idx));
+        btn.addEventListener('click', () => deleteItem(item.id));
 
         li.append(cb, span, btn);
         listEl.appendChild(li);
       });
     }
 
-    function addItem() {
+    async function loadItems() {
+      const { data, error } = await supabase
+        .from('shopping_items')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (error) { console.error('Load error:', error); return; }
+      items = data;
+      render();
+    }
+
+    async function addItem() {
       const name = input.value.trim();
       if (!name) return;
-      items.push({ name, checked: false });
       input.value = '';
       input.focus();
-      save();
+      const { data, error } = await supabase
+        .from('shopping_items')
+        .insert({ name, checked: false })
+        .select();
+      if (error) { console.error('Insert error:', error); return; }
+      items.push(data[0]);
       render();
     }
 
-    function toggleItem(idx) {
-      items[idx].checked = !items[idx].checked;
-      save();
+    async function toggleItem(id) {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      const newChecked = !item.checked;
+      const { error } = await supabase
+        .from('shopping_items')
+        .update({ checked: newChecked })
+        .eq('id', id);
+      if (error) { console.error('Update error:', error); return; }
+      item.checked = newChecked;
       render();
     }
 
-    function deleteItem(idx) {
-      items.splice(idx, 1);
-      save();
+    async function deleteItem(id) {
+      const { error } = await supabase
+        .from('shopping_items')
+        .delete()
+        .eq('id', id);
+      if (error) { console.error('Delete error:', error); return; }
+      items = items.filter(i => i.id !== id);
       render();
     }
 
-    render();
+    loadItems();
     input.focus();
   </script>
 </body>
